@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Vivaldi Boolean Bookmark Search",
+  "description": "Search bookmarks using Boolean logic (AND / NOT).",
+  "version": "1.1",
+  "permissions": ["bookmarks",
+                  "storage"],
+    "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "bookmark.png",
+      "32": "bookmark.png"
+    }
+  }
+}

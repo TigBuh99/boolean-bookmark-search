@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bookmark Search</title>
+<style>
+body {
+  font-family: system-ui, sans-serif;
+  padding: 10px;
+  width: 300px;
+  background: #f8f8f8;
+}
+input[type="text"] {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+label {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+button {
+  width: 100%;
+  padding: 6px;
+  border: none;
+  background-color: #4a6fa5;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+button:hover {
+  background-color: #365b8a;
+}
+#results {
+  margin-top: 10px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.result a {
+  display: block;
+  color: #2a4d8f;
+  text-decoration: none;
+  margin-bottom: 4px;
+}
+.result a:hover {
+  text-decoration: underline;
+}
+/* Saved search list styling */
+#savedSearches {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+#savedSearches .saved {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+#savedSearches .saved button {
+  width: auto;              /* don’t stretch full width */
+  padding: 2px 6px;
+  margin-right: 4px;
+  font-size: 11px;
+  border-radius: 4px;
+  background-color: #eee;
+  color: #333;
+}
+
+#savedSearches .saved button:hover {
+  background-color: #ddd;
+}
+</style>
+</head>
+<body>
+  <div>
+    <input id="query" type="text" placeholder="Enter Boolean query">
+    <button id="run">Search</button>
+    <button id="clear">Clear</button>
+    <button id="save">⭐ Save</button>
+    <label><input type="checkbox" id="tagsOnly"> Tags only</label>
+  </div>
+
+  <div id="savedSearches"></div>
+
+  <div id="results"></div>
+
+  <!-- 👇 This line is essential -->
+  <script src="popup.js"></script>
+</body>
+</html>
