@@ -90,10 +90,9 @@ Here are some sample queries to illustrate the different search modes:
 
 ## What’s New
 
-### v1.1.0 — 2025‑10‑17
-- **Added:** Regex support in search queries. You can now use `re:pattern` or `/pattern/` to match bookmarks with regular expressions.
-- **Improved:** Boolean parser now handles implicit AND correctly (e.g. `airf NOT hot`).
-- **Fixed:** “Tags only” checkbox now properly restricts matches to `tag:` entries in bookmark descriptions.
+## What’s New
+
+- See the [CHANGELOG](CHANGELOG.md) for details of all releases.
 
 ---
 
