@@ -7,8 +7,13 @@ Includes **Saved Searches** so you can ⭐ save your favorite queries, ▶ re‑
 
 ## ✨ Features
 
+## Features
+
 - **Boolean search** over bookmark descriptions:
   - Supports `AND`, `OR`, `NOT`, parentheses `( )`, and quoted phrases `"like this"`.
+- **Regex search**:
+  - Use `re:pattern` or `/pattern/` to match bookmarks with regular expressions.
+  - Example: `/hotel.*/ AND NOT /airf/`
 - **Tag filtering**:
   - Use `tag:example` in your bookmark descriptions and enable the **Tags only** checkbox to restrict searches to tags.
 - **Saved Searches**:
@@ -46,6 +51,30 @@ Includes **Saved Searches** so you can ⭐ save your favorite queries, ▶ re‑
 
 ---
 
+## Usage Examples
+
+Here are some sample queries to illustrate the different search modes:
+
+- **Boolean logic**
+  - `travel AND hotel`
+  - `airf OR train`
+  - `beach AND NOT crowded`
+
+- **Quoted phrases**
+  - `"machine learning"`
+  - `"summer holiday"`
+
+- **Tag filtering**
+  - `tag:work AND project`
+  - `tag:reading AND "science fiction"`
+
+- **Regex search**
+  - `/hotel.*/` → matches any word starting with “hotel”
+  - `re:202[0-9]` → matches years 2020–2029
+  - `/air(f|line)/ AND NOT /train/` → combine regex with Boolean operators
+
+---
+
 ## ⚙️ Permissions
 
 - `"bookmarks"` — required to read your bookmarks tree.
@@ -58,6 +87,15 @@ Includes **Saved Searches** so you can ⭐ save your favorite queries, ▶ re‑
 - **popup.html** — UI layout and CSS.
 - **popup.js** — Boolean parser, evaluator, search logic, and Saved Searches.
 - **manifest.json** — declares permissions and popup entry point.
+
+---
+
+## What’s New
+
+### v1.1.0 — 2025‑10‑17
+- **Added:** Regex support in search queries. You can now use `re:pattern` or `/pattern/` to match bookmarks with regular expressions.
+- **Improved:** Boolean parser now handles implicit AND correctly (e.g. `airf NOT hot`).
+- **Fixed:** “Tags only” checkbox now properly restricts matches to `tag:` entries in bookmark descriptions.
 
 ---
 
