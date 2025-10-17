@@ -1,0 +1,32 @@
+# Auto-detect text files and normalize line endings to LF in the repo
+* text=auto eol=lf
+
+# Explicitly mark common text formats
+*.js     text
+*.json   text
+*.html   text
+*.css    text
+*.md     text
+*.yml    text
+*.yaml   text
+
+# Treat shell and config scripts as text
+*.sh     text eol=lf
+*.bash   text eol=lf
+*.conf   text eol=lf
+
+# Windows batch files should keep CRLF
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+
+# Binary files should never be modified
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.zip    binary
+*.gz     binary
+*.tar    binary
+*.7z     binary
+*.pdf    binary

@@ -1,60 +1,89 @@
-// --- Normalisation helper ---
-function cleanTerm(str) {
-    return str
+// --- Normalisation helpers ---
+function cleanText(str) {
+    return (str || "")
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
-    .replace(/^[^\w]+|[^\w]+$/g, "") // strip leading/trailing punctuation
-    .replace(/\s+/g, "")             // remove all whitespace variants
+    .toLowerCase();
+}
+function cleanTerm(str) {
+    return (str || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/^[^\w]+|[^\w]+$/g, "")
     .toLowerCase();
 }
 
-// --- Tokenizer ---
+// --- Tokenizer with explicit token types ---
 function tokenize(input) {
-    const regex = /\s*(\(|\)|AND|OR|NOT|"[^"]+"|\S+)/gi;
     const tokens = [];
+    const re = /\s*(\(|\)|"[^"]+"|AND|OR|NOT|[^\s()]+)/gi;
     let m;
-    while ((m = regex.exec(input)) !== null) {
-        let tok = m[1];
-        if (/^".+"$/.test(tok)) tok = tok.slice(1, -1); // strip quotes
-        tokens.push(tok);
+    while ((m = re.exec(input)) !== null) {
+        const raw = m[1];
+        const upper = raw.toUpperCase();
+        if (raw === "(") tokens.push({ type: "LPAREN", value: raw });
+        else if (raw === ")") tokens.push({ type: "RPAREN", value: raw });
+        else if (upper === "AND") tokens.push({ type: "AND", value: raw });
+        else if (upper === "OR") tokens.push({ type: "OR", value: raw });
+        else if (upper === "NOT") tokens.push({ type: "NOT", value: raw });
+        else if (/^".+"$/.test(raw)) tokens.push({ type: "TERM", value: raw.slice(1, -1) });
+        else tokens.push({ type: "TERM", value: raw });
     }
     return tokens;
 }
 
-// --- Parser (recursive descent) ---
+// --- Parser with NOT precedence + implicit AND ---
 function parseExpression(tokens) {
     let pos = 0;
+    const peek = () => tokens[pos];
+    const consume = () => tokens[pos++];
 
-    function peek() { return tokens[pos]; }
-    function consume() { return tokens[pos++]; }
+    function startsFactor(t) {
+        return t && (t.type === "TERM" || t.type === "NOT" || t.type === "LPAREN");
+    }
 
-    function parseFactor() {
-        if (peek() === "(") {
+    function parsePrimary() {
+        const t = peek();
+        if (!t) return null;
+        if (t.type === "LPAREN") {
             consume();
             const expr = parseOr();
-            if (peek() === ")") consume();
+            if (peek() && peek().type === "RPAREN") consume();
             return expr;
-        } else if (peek() && peek().toUpperCase() === "NOT") {
-            consume();
-            return { type: "NOT", expr: parseFactor() };
-        } else {
-            const raw = consume();
-            return { type: "TERM", value: cleanTerm(raw) };
         }
+        if (t.type === "TERM") {
+            consume();
+            return { type: "TERM", value: t.value };
+        }
+        consume(); // recover
+        return null;
+    }
+
+    function parseNot() {
+        if (peek() && peek().type === "NOT") {
+            consume();
+            return { type: "NOT", expr: parseNot() }; // support NOT NOT term
+        }
+        return parsePrimary();
     }
 
     function parseAnd() {
-        let node = parseFactor();
-        while (peek() && peek().toUpperCase() === "AND") {
+        let node = parseNot();
+        // Explicit AND
+        while (peek() && peek().type === "AND") {
             consume();
-            node = { type: "AND", left: node, right: parseFactor() };
+            node = { type: "AND", left: node, right: parseNot() };
+        }
+        // Implicit AND by adjacency (TERM/NOT/LPAREN)
+        while (startsFactor(peek())) {
+            node = { type: "AND", left: node, right: parseNot() };
         }
         return node;
     }
 
     function parseOr() {
         let node = parseAnd();
-        while (peek() && peek().toUpperCase() === "OR") {
+        while (peek() && peek().type === "OR") {
             consume();
             node = { type: "OR", left: node, right: parseAnd() };
         }
@@ -64,34 +93,84 @@ function parseExpression(tokens) {
     return parseOr();
 }
 
-// --- Evaluator ---
-function evalExpr(expr, wordSet) {
-    switch (expr.type) {
-        case "TERM":
-            return wordSet.has(expr.value);
-        case "NOT":
-            return !evalExpr(expr.expr, wordSet);
-        case "AND":
-            return evalExpr(expr.left, wordSet) && evalExpr(expr.right, wordSet);
-        case "OR":
-            return evalExpr(expr.left, wordSet) || evalExpr(expr.right, wordSet);
+// --- Context builder (supports tagsOnly) ---
+function makeContext(b, useRegexp, tagsOnly) {
+    const title = b.title || "";
+    const url = b.url || "";
+    const desc = b.description || "";
+
+    const combined = cleanText(`${title} ${url} ${desc}`);
+
+    // Extract explicit tag: entries from description for tagsOnly mode
+    const tags = [];
+    desc.split(/[\s,;]+/).forEach(w => {
+        if (!w) return;
+        if (w.toLowerCase().startsWith("tag:")) {
+            const t = cleanText(w.slice(4));
+            if (t) tags.push(t);
+        }
+    });
+    const tagsText = tags.join(" "); // for regex over tags-only
+    const tagSet = new Set(tags);    // for literal match over tags-only
+
+    return { combined, tagsText, tagSet, useRegexp, tagsOnly };
+}
+
+// --- Term matching (unified; respects tagsOnly) ---
+function termMatches(term, ctx) {
+    const { combined, tagsText, tagSet, useRegexp, tagsOnly } = ctx;
+    const explicitRegex = term.startsWith("re:") || (term.startsWith("/") && term.endsWith("/"));
+    const isRegex = useRegexp || explicitRegex;
+
+    if (isRegex) {
+        let pattern = term;
+        if (pattern.startsWith("re:")) pattern = pattern.slice(3);
+        if (pattern.startsWith("/") && pattern.endsWith("/")) pattern = pattern.slice(1, -1);
+        if (!pattern) return false;
+
+        try {
+            const regex = new RegExp(pattern, "i");
+            return tagsOnly ? regex.test(tagsText) : regex.test(combined);
+        } catch {
+            console.warn("Invalid regex pattern:", pattern);
+            return false;
+        }
+    } else {
+        const needle = cleanTerm(term);
+        if (!needle) return false;
+        return tagsOnly ? tagSet.has(needle) : combined.includes(needle);
     }
 }
 
-// --- Collect all terms for highlighting ---
-function collectTerms(expr, terms = []) {
+// --- Evaluator ---
+function evalExpr(expr, context) {
+    if (!expr) return false;
+    switch (expr.type) {
+        case "TERM": return termMatches(expr.value, context);
+        case "NOT":  return !evalExpr(expr.expr, context);
+        case "AND":  return evalExpr(expr.left, context) && evalExpr(expr.right, context);
+        case "OR":   return evalExpr(expr.left, context) || evalExpr(expr.right, context);
+        default:     return false;
+    }
+}
+
+// --- Collect terms for display with negation ---
+function collectTerms(expr, terms = [], negated = false) {
     if (!expr) return terms;
     switch (expr.type) {
-        case "TERM":
-            terms.push(expr.value);
+        case "TERM": {
+            const raw = expr.value;
+            const isRegex = raw.startsWith("re:") || (raw.startsWith("/") && raw.endsWith("/"));
+            terms.push({ raw, kind: isRegex ? "regex" : "literal", negated });
             break;
+        }
         case "NOT":
-            collectTerms(expr.expr, terms);
+            collectTerms(expr.expr, terms, true);
             break;
         case "AND":
         case "OR":
-            collectTerms(expr.left, terms);
-            collectTerms(expr.right, terms);
+            collectTerms(expr.left, terms, negated);
+            collectTerms(expr.right, terms, negated);
             break;
     }
     return terms;
@@ -100,7 +179,8 @@ function collectTerms(expr, terms = []) {
 // --- Main search ---
 async function searchBookmarks() {
     const query = document.getElementById("query").value.trim();
-    const tagsOnly = document.getElementById("tagsOnly").checked;
+    const tagsOnly = !!document.getElementById("tagsOnly")?.checked;
+    const useRegexp = !!document.getElementById("useRegexp")?.checked;
     const resultsEl = document.getElementById("results");
     resultsEl.innerHTML = "";
 
@@ -109,20 +189,19 @@ async function searchBookmarks() {
         return;
     }
 
-    // Parse query into AST
     const tokens = tokenize(query);
     const ast = parseExpression(tokens);
     const allTerms = collectTerms(ast);
 
-    // Gather bookmarks
+    // Traverse bookmark tree
     const traverse = (nodes, results = []) => {
         for (const n of nodes) {
             if (n.url) {
                 results.push({
                     id: n.id,
-                    title: n.title,
-                    url: n.url,
-                    description: n.description || ""
+                    title: n.title || "",
+                    url: n.url || "",
+                    description: n.description || "" // may be empty
                 });
             }
             if (n.children) traverse(n.children, results);
@@ -132,33 +211,15 @@ async function searchBookmarks() {
 
     const tree = await chrome.bookmarks.getTree();
     const bookmarks = traverse(tree);
-
     const matches = [];
 
-    // Evaluate each bookmark
     for (const b of bookmarks) {
-        const desc = b.description || "";
-        const wordSet = new Set();
-
-        const items = desc.split(/[\s,;]+/);
-        items.forEach(w => {
-            if (!w) return;
-            if (tagsOnly) {
-                if (w.toLowerCase().startsWith("tag:")) {
-                    const tag = cleanTerm(w.slice(4));
-                    if (tag) wordSet.add(tag);
-                }
-            } else {
-                wordSet.add(cleanTerm(w));
-            }
-        });
-
-        if (evalExpr(ast, wordSet)) {
-            matches.push({ ...b, wordSet });
+        const ctx = makeContext(b, useRegexp, tagsOnly);
+        if (evalExpr(ast, ctx)) {
+            matches.push({ ...b, _ctx: ctx });
         }
     }
 
-    // Render results
     if (!matches.length) {
         resultsEl.textContent = "No matches found.";
         return;
@@ -166,6 +227,7 @@ async function searchBookmarks() {
 
     resultsEl.innerHTML = `<b>${matches.length} matches:</b><br><br>`;
 
+    // Render results with same matching logic (only matched terms; NOT shown in red)
     matches.forEach(b => {
         const div = document.createElement("div");
         div.className = "result";
@@ -174,19 +236,22 @@ async function searchBookmarks() {
         a.href = b.url;
         a.target = "_blank";
         a.title = b.url;
-        a.textContent = b.title;
+        a.textContent = b.title || b.url;
         div.appendChild(a);
 
         if (allTerms.length) {
             const span = document.createElement("span");
-            span.innerHTML = " — terms: " + allTerms.map(term => {
-                if (b.wordSet.has(term)) {
-                    return `<b>${term}</b>`;
-                } else {
-                    return `<span style="color:#888;text-decoration:line-through;">${term}</span>`;
-                }
-            }).join(", ");
-            div.appendChild(span);
+
+            const matched = allTerms.filter(({ raw }) => termMatches(raw, b._ctx));
+
+            if (matched.length) {
+                span.innerHTML = " — terms: " + matched.map(({ raw, negated }) => {
+                    return negated
+                    ? `<span style="color:#c00;">NOT ${raw}</span>`
+                    : `<b>${raw}</b>`;
+                }).join(", ");
+                div.appendChild(span);
+            }
         }
 
         resultsEl.appendChild(div);
@@ -196,16 +261,12 @@ async function searchBookmarks() {
 // --- Saved Searches ---
 async function loadSavedSearches() {
     const { saved = [] } = await chrome.storage.local.get("saved");
-    console.log("Loading saved searches:", saved); // 👈 debug
     renderSavedSearches(saved);
 }
 
 function renderSavedSearches(saved) {
     const container = document.getElementById("savedSearches");
-    if (!container) {
-        console.warn("No #savedSearches container found in DOM");
-        return;
-    }
+    if (!container) return;
 
     if (!saved.length) {
         container.innerHTML = "<b>Saved Searches:</b><br><i>(none yet)</i>";
@@ -220,20 +281,20 @@ function renderSavedSearches(saved) {
         const runBtn = document.createElement("button");
         runBtn.textContent = "▶";
         runBtn.addEventListener("click", () => {
-            console.log("Re‑running saved search:", s);
             document.getElementById("query").value = s.query;
-            document.getElementById("tagsOnly").checked = s.tagsOnly;
+            document.getElementById("tagsOnly").checked = !!s.tagsOnly;
+            document.getElementById("useRegexp").checked = !!s.useRegexp;
             searchBookmarks();
         });
 
         const delBtn = document.createElement("button");
         delBtn.textContent = "❌";
         delBtn.addEventListener("click", async () => {
-            console.log("Deleting saved search:", s);
-            const { saved = [] } = await chrome.storage.local.get("saved");
-            saved.splice(idx, 1);
-            await chrome.storage.local.set({ saved });
-            renderSavedSearches(saved);
+            const store = await chrome.storage.local.get("saved");
+            const list = store.saved || [];
+            list.splice(idx, 1);
+            await chrome.storage.local.set({ saved: list });
+            renderSavedSearches(list);
         });
 
         div.appendChild(runBtn);
@@ -243,41 +304,18 @@ function renderSavedSearches(saved) {
     });
 }
 
-const saveBtn = document.getElementById("save");
-if (saveBtn) {
-    saveBtn.addEventListener("click", async () => {
-        const query = document.getElementById("query").value.trim();
-        const tagsOnly = document.getElementById("tagsOnly").checked;
-        if (!query) return;
-
-        const { saved = [] } = await chrome.storage.local.get("saved");
-        saved.unshift({ query, tagsOnly });
-        await chrome.storage.local.set({ saved });
-        console.log("Saved new search:", query, "tagsOnly:", tagsOnly);
-        renderSavedSearches(saved);
-    });
-}
-
-// Load saved searches when popup opens
-loadSavedSearches();
-
+// --- Save current query ---
 document.getElementById("save").addEventListener("click", async () => {
     const query = document.getElementById("query").value.trim();
-    const tagsOnly = document.getElementById("tagsOnly").checked;
+    const tagsOnly = !!document.getElementById("tagsOnly")?.checked;
+    const useRegexp = !!document.getElementById("useRegexp")?.checked;
     if (!query) return;
 
     const { saved = [] } = await chrome.storage.local.get("saved");
+    const exists = saved.some(s => s.query === query && !!s.tagsOnly === tagsOnly && !!s.useRegexp === useRegexp);
+    if (exists) return;
 
-    // ✅ Deduplication: skip if this exact query + mode already exists
-    const exists = saved.some(s => s.query === query && s.tagsOnly === tagsOnly);
-    if (exists) {
-        console.log("Search already saved, skipping duplicate:", query);
-        return;
-    }
-
-    // ✅ Newest‑first ordering
-    saved.unshift({ query, tagsOnly });
-
+    saved.unshift({ query, tagsOnly, useRegexp });
     await chrome.storage.local.set({ saved });
     renderSavedSearches(saved);
 });

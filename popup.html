@@ -76,16 +76,34 @@ button:hover {
 #savedSearches .saved button:hover {
   background-color: #ddd;
 }
+#useRegexp {
+  margin-left: 8px;
+}
+
+.checkboxes {
+  display: flex;          /* put children side by side */
+  gap: 12px;              /* space between the two labels */
+  align-items: center;    /* vertically align checkbox + text */
+  margin-top: 6px;        /* optional spacing above the row */
+}
+
+.checkboxes input[type="checkbox"] {
+  margin-right: 4px;      /* space between box and its label text */
+}
+
 </style>
 </head>
 <body>
-  <div>
-    <input id="query" type="text" placeholder="Enter Boolean query">
-    <button id="run">Search</button>
-    <button id="clear">Clear</button>
-    <button id="save">⭐ Save</button>
-    <label><input type="checkbox" id="tagsOnly"> Tags only</label>
-  </div>
+<div>
+  <input id="query" type="text" placeholder="Enter Boolean query">
+  <button id="run">Search</button>
+  <button id="clear">Clear</button>
+  <button id="save">⭐ Save</button>
+</div>
+<div class="checkboxes">
+  <label><input type="checkbox" id="tagsOnly"> Tags only</label>
+  <label><input type="checkbox" id="useRegexp"> Use regular expressions</label>
+</div>
 
   <div id="savedSearches"></div>
 
