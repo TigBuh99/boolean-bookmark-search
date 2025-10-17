@@ -62,19 +62,17 @@ function parseExpression(tokens) {
     function parseNot() {
         if (peek() && peek().type === "NOT") {
             consume();
-            return { type: "NOT", expr: parseNot() }; // support NOT NOT term
+            return { type: "NOT", expr: parseNot() };
         }
         return parsePrimary();
     }
 
     function parseAnd() {
         let node = parseNot();
-        // Explicit AND
         while (peek() && peek().type === "AND") {
             consume();
             node = { type: "AND", left: node, right: parseNot() };
         }
-        // Implicit AND by adjacency (TERM/NOT/LPAREN)
         while (startsFactor(peek())) {
             node = { type: "AND", left: node, right: parseNot() };
         }
@@ -101,7 +99,7 @@ function makeContext(b, useRegexp, tagsOnly) {
 
     const combined = cleanText(`${title} ${url} ${desc}`);
 
-    // Extract explicit tag: entries from description for tagsOnly mode
+    // Extract explicit tag: entries
     const tags = [];
     desc.split(/[\s,;]+/).forEach(w => {
         if (!w) return;
@@ -110,13 +108,13 @@ function makeContext(b, useRegexp, tagsOnly) {
             if (t) tags.push(t);
         }
     });
-    const tagsText = tags.join(" "); // for regex over tags-only
-    const tagSet = new Set(tags);    // for literal match over tags-only
+    const tagsText = tags.join(" ");
+    const tagSet = new Set(tags);
 
     return { combined, tagsText, tagSet, useRegexp, tagsOnly };
 }
 
-// --- Term matching (unified; respects tagsOnly) ---
+// --- Term matching ---
 function termMatches(term, ctx) {
     const { combined, tagsText, tagSet, useRegexp, tagsOnly } = ctx;
     const explicitRegex = term.startsWith("re:") || (term.startsWith("/") && term.endsWith("/"));
@@ -127,7 +125,6 @@ function termMatches(term, ctx) {
         if (pattern.startsWith("re:")) pattern = pattern.slice(3);
         if (pattern.startsWith("/") && pattern.endsWith("/")) pattern = pattern.slice(1, -1);
         if (!pattern) return false;
-
         try {
             const regex = new RegExp(pattern, "i");
             return tagsOnly ? regex.test(tagsText) : regex.test(combined);
@@ -154,7 +151,7 @@ function evalExpr(expr, context) {
     }
 }
 
-// --- Collect terms for display with negation ---
+// --- Collect terms for display ---
 function collectTerms(expr, terms = [], negated = false) {
     if (!expr) return terms;
     switch (expr.type) {
@@ -193,7 +190,6 @@ async function searchBookmarks() {
     const ast = parseExpression(tokens);
     const allTerms = collectTerms(ast);
 
-    // Traverse bookmark tree
     const traverse = (nodes, results = []) => {
         for (const n of nodes) {
             if (n.url) {
@@ -201,7 +197,7 @@ async function searchBookmarks() {
                     id: n.id,
                     title: n.title || "",
                     url: n.url || "",
-                    description: n.description || "" // may be empty
+                    description: n.description || ""
                 });
             }
             if (n.children) traverse(n.children, results);
@@ -227,7 +223,6 @@ async function searchBookmarks() {
 
     resultsEl.innerHTML = `<b>${matches.length} matches:</b><br><br>`;
 
-    // Render results with same matching logic (only matched terms; NOT shown in red)
     matches.forEach(b => {
         const div = document.createElement("div");
         div.className = "result";
@@ -241,9 +236,7 @@ async function searchBookmarks() {
 
         if (allTerms.length) {
             const span = document.createElement("span");
-
             const matched = allTerms.filter(({ raw }) => termMatches(raw, b._ctx));
-
             if (matched.length) {
                 span.innerHTML = " — terms: " + matched.map(({ raw, negated }) => {
                     return negated
@@ -253,7 +246,6 @@ async function searchBookmarks() {
                 div.appendChild(span);
             }
         }
-
         resultsEl.appendChild(div);
     });
 }
@@ -263,7 +255,6 @@ async function loadSavedSearches() {
     const { saved = [] } = await chrome.storage.local.get("saved");
     renderSavedSearches(saved);
 }
-
 function renderSavedSearches(saved) {
     const container = document.getElementById("savedSearches");
     if (!container) return;
@@ -337,3 +328,147 @@ document.getElementById("clear").addEventListener("click", () => {
     document.getElementById("query").value = "";
     document.getElementById("results").innerHTML = "";
 });
+
+// ======================================================
+// Autocomplete + Tag Panel Integration
+// ======================================================
+
+const queryInput = document.getElementById('query');
+const suggestionsBox = document.getElementById('suggestions');
+const tagPanel = document.getElementById('tag-panel');
+
+let tags = [];
+let activeIndex = -1;
+
+// Collect tags with counts from bookmarks
+function collectTagsWithCounts(callback) {
+    chrome.bookmarks.getTree(nodes => {
+        const tagMap = new Map();
+
+        function walk(node) {
+            if (node.url) {
+                const desc = node.description || "";
+                const matches = desc.match(/tag:([^\s]+)/gi);
+                if (matches) {
+                    matches.forEach(m => {
+                        const tag = m.toLowerCase();
+                        tagMap.set(tag, (tagMap.get(tag) || 0) + 1);
+                    });
+                }
+            }
+            if (node.children) node.children.forEach(walk);
+        }
+
+        nodes.forEach(walk);
+        callback(Array.from(tagMap.entries()).sort());
+    });
+}
+
+// Render tag panel
+function renderTagPanel(tagsWithCounts) {
+    // strip "tag:" prefix so panel shows bare tags
+    tags = tagsWithCounts.map(([tag]) => tag.replace(/^tag:/, ""));
+    tagPanel.innerHTML = tagsWithCounts
+    .map(([tag, count]) => {
+        const bare = tag.replace(/^tag:/, "");
+        return `<div data-tag="${bare}">
+        <span>${bare}</span><span>${count}</span>
+        </div>`;
+    })
+    .join('');
+}
+
+// Autocomplete suggestions
+function showSuggestions(prefix) {
+    const matches = tags.filter(t => t.startsWith('tag:' + prefix.toLowerCase()));
+    if (matches.length === 0) {
+        hideSuggestions();
+        return;
+    }
+    suggestionsBox.innerHTML = matches
+    .map((m, i) => `<div data-index="${i}">${m}</div>`)
+    .join('');
+    suggestionsBox.style.display = 'block';
+    activeIndex = -1;
+}
+
+function hideSuggestions() {
+    suggestionsBox.style.display = 'none';
+    activeIndex = -1;
+}
+
+function applySuggestion(tag) {
+    const current = queryInput.value.trim();
+    if (current) {
+        // If user was mid‑typing a tag fragment, replace it
+        if (/tag:[^\s]*$/i.test(current)) {
+            queryInput.value = current.replace(/tag:[^\s]*$/i, tag);
+        } else {
+            // Otherwise append with AND
+            queryInput.value = current + " AND " + tag;
+        }
+    } else {
+        queryInput.value = tag;
+    }
+    hideSuggestions();
+    queryInput.focus();
+}
+
+// Input events
+queryInput.addEventListener('input', e => {
+    const value = e.target.value;
+    const match = value.match(/tag:([^\s]*)$/i);
+    if (match) {
+        showSuggestions(match[1]);
+    } else {
+        hideSuggestions();
+    }
+});
+
+queryInput.addEventListener('keydown', e => {
+    const items = suggestionsBox.querySelectorAll('div');
+    if (suggestionsBox.style.display === 'block' && items.length > 0) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIndex = (activeIndex + 1) % items.length;
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIndex = (activeIndex - 1 + items.length) % items.length;
+        } else if (e.key === 'Enter') {
+            if (activeIndex >= 0) {
+                e.preventDefault();
+                applySuggestion(items[activeIndex].textContent);
+            }
+        }
+        items.forEach((el, i) => {
+            el.classList.toggle('active', i === activeIndex);
+        });
+    }
+});
+
+suggestionsBox.addEventListener('click', e => {
+    if (e.target.tagName === 'DIV') {
+        applySuggestion(e.target.textContent);
+    }
+});
+
+// Tag panel click
+tagPanel.addEventListener('click', e => {
+    const div = e.target.closest('div[data-tag]');
+    if (div) {
+        const tag = div.dataset.tag;
+        const current = queryInput.value.trim();
+        queryInput.value = current
+        ? current + " AND " + tag
+        : tag;
+        searchBookmarks();
+    }
+});
+
+// Initialize tag panel
+collectTagsWithCounts(renderTagPanel);
+
+// Refresh tags when bookmarks change
+chrome.bookmarks.onChanged.addListener(() => collectTagsWithCounts(renderTagPanel));
+chrome.bookmarks.onCreated.addListener(() => collectTagsWithCounts(renderTagPanel));
+chrome.bookmarks.onRemoved.addListener(() => collectTagsWithCounts(renderTagPanel));
