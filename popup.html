@@ -56,15 +56,13 @@ button:hover {
   margin-top: 10px;
   font-size: 12px;
 }
-
 #savedSearches .saved {
   display: flex;
   align-items: center;
   margin-bottom: 4px;
 }
-
 #savedSearches .saved button {
-  width: auto;              /* don’t stretch full width */
+  width: auto;
   padding: 2px 6px;
   margin-right: 4px;
   font-size: 11px;
@@ -72,30 +70,67 @@ button:hover {
   background-color: #eee;
   color: #333;
 }
-
 #savedSearches .saved button:hover {
   background-color: #ddd;
 }
 #useRegexp {
   margin-left: 8px;
 }
-
 .checkboxes {
-  display: flex;          /* put children side by side */
-  gap: 12px;              /* space between the two labels */
-  align-items: center;    /* vertically align checkbox + text */
-  margin-top: 6px;        /* optional spacing above the row */
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 6px;
 }
-
 .checkboxes input[type="checkbox"] {
-  margin-right: 4px;      /* space between box and its label text */
+  margin-right: 4px;
 }
 
+/* --- Autocomplete + Tag Panel --- */
+.suggestions {
+  position: absolute;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin-top: 2px;
+  max-height: 150px;
+  overflow-y: auto;
+  width: calc(100% - 20px);
+  z-index: 1000;
+  display: none;
+  font-size: 0.9em;
+}
+.suggestions div {
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.suggestions div:hover,
+.suggestions div.active {
+  background-color: #f0f0f0;
+}
+.tag-panel {
+  margin-top: 10px;
+  border-top: 1px solid #ccc;
+  padding-top: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 0.9em;
+}
+.tag-panel div {
+  padding: 4px 6px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+}
+.tag-panel div:hover {
+  background-color: #f0f0f0;
+}
 </style>
 </head>
 <body>
 <div>
   <input id="query" type="text" placeholder="Enter Boolean query">
+  <div id="suggestions" class="suggestions"></div>
   <button id="run">Search</button>
   <button id="clear">Clear</button>
   <button id="save">⭐ Save</button>
@@ -105,11 +140,10 @@ button:hover {
   <label><input type="checkbox" id="useRegexp"> Use regular expressions</label>
 </div>
 
-  <div id="savedSearches"></div>
+<div id="savedSearches"></div>
+<div id="tag-panel" class="tag-panel"></div>
+<div id="results"></div>
 
-  <div id="results"></div>
-
-  <!-- 👇 This line is essential -->
-  <script src="popup.js"></script>
+<script src="popup.js"></script>
 </body>
 </html>
