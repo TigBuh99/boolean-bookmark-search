@@ -7,8 +7,6 @@ Includes **Saved Searches** so you can ⭐ save your favorite queries, ▶ re‑
 
 ## ✨ Features
 
-## Features
-
 - **Boolean search** over bookmark descriptions:
   - Supports `AND`, `OR`, `NOT`, parentheses `( )`, and quoted phrases `"like this"`.
 - **Regex search**:
