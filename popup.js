@@ -248,6 +248,8 @@ async function searchBookmarks() {
         }
         resultsEl.appendChild(div);
     });
+    const firstLink = resultsEl.querySelector(".result a");
+    if (firstLink) firstLink.focus();
 }
 
 // --- Saved Searches ---
@@ -295,7 +297,6 @@ function renderSavedSearches(saved) {
     });
 }
 
-// --- Save current query ---
 document.getElementById("save").addEventListener("click", async () => {
     const query = document.getElementById("query").value.trim();
     const tagsOnly = !!document.getElementById("tagsOnly")?.checked;
@@ -327,6 +328,59 @@ document.getElementById("query").addEventListener("keydown", e => {
 document.getElementById("clear").addEventListener("click", () => {
     document.getElementById("query").value = "";
     document.getElementById("results").innerHTML = "";
+});
+
+// ======================================================
+// Autocomplete + Tag Panel Integration
+// ======================================================
+
+// ... your collectTagsWithCounts, renderTagPanel, showSuggestions, etc. ...
+
+// Initialize tag panel
+collectTagsWithCounts(renderTagPanel);
+
+// Refresh tags when bookmarks change
+chrome.bookmarks.onChanged.addListener(() => collectTagsWithCounts(renderTagPanel));
+chrome.bookmarks.onCreated.addListener(() => collectTagsWithCounts(renderTagPanel));
+chrome.bookmarks.onRemoved.addListener(() => collectTagsWithCounts(renderTagPanel));
+
+// ======================================================
+// Ergonomic keyboard loop
+// ======================================================
+
+document.addEventListener("DOMContentLoaded", () => {
+    const query = document.getElementById("query");
+    const tagsOnly = document.getElementById("tagsOnly");
+    const resultsEl = document.getElementById("results");
+
+    // 1. Default Tags Only checkbox + focus query
+    tagsOnly.checked = true;
+    query.focus();
+
+    // 2. Esc always returns focus to query
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape") {
+            e.preventDefault();
+            query.focus();
+        }
+    });
+
+    // 3. Arrow key navigation inside results
+    document.addEventListener("keydown", e => {
+        if (!["ArrowDown", "ArrowUp"].includes(e.key)) return;
+
+        const links = Array.from(resultsEl.querySelectorAll(".result a"));
+        if (!links.length) return;
+
+        const active = document.activeElement;
+        let idx = links.indexOf(active);
+
+        if (e.key === "ArrowDown") idx = (idx + 1) % links.length;
+        if (e.key === "ArrowUp") idx = (idx - 1 + links.length) % links.length;
+
+        links[idx].focus();
+        e.preventDefault();
+    });
 });
 
 // ======================================================
@@ -450,6 +504,23 @@ suggestionsBox.addEventListener('click', e => {
     if (e.target.tagName === 'DIV') {
         applySuggestion(e.target.textContent);
     }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+    // 1. Default Tags Only checkbox
+    document.getElementById("tagsOnly").checked = true;
+
+    // 2. Focus query input on popup open
+    const query = document.getElementById("query");
+    query.focus();
+
+    // 3. Esc key returns focus to query field
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape") {
+            e.preventDefault();
+            query.focus();
+        }
+    });
 });
 
 // Tag panel click
